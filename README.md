@@ -1,7 +1,3 @@
-# coeus 
-
-i wanted to build an interactive notetaking tool with a mind mapping functionality similar to milanote and a constellation visual similar to obsidian but with an added layer of semantic mapping because i didn't like that the other two don't have that. also i like building my own versions of products that are already good.
-
 ## the math behind semantic mapping
 
 ### 0. notation
@@ -181,19 +177,74 @@ neighbor relations are not mutual, so an outlier may list a cluster member that 
 
 **remark 4.8 (optimization):** $Y$ is computed in three steps.
 
-(a) **starting layout:* readings are first placed using a spectral embedding of $W$: the eigenvectors of a matrix built from $W$ that assign similar values to strongly linked readings. taking two of these eigenvectors as coordinates puts each cluster roughly in the right place before any refinement.
+(a) **starting layout.** readings are first placed using a *spectral embedding* of $W$: the eigenvectors of a matrix built from $W$ that assign similar values to strongly linked readings. taking two of these eigenvectors as coordinates puts each cluster roughly in the right place before any refinement.
 
-(b) *refinement:* the layout is then improved by stochastic gradient descent over 500 epochs. in each round, the following is repeated for every edge, more often for edges with higher $w_{ij}$:
+(b) **refinement.** the layout is then improved by stochastic gradient descent over 500 rounds (*epochs*). in each round, the following is repeated for every edge, more often for edges with higher $w_{ij}$:
 
-- pull: move $y_i$ and $y_j$ slightly toward each other.
-- push: pick 5 readings at random and move $y_i$ slightly away from each of them.
+- *pull:* move $y_i$ and $y_j$ slightly toward each other.
+- *push:* pick 5 readings at random and move $y_i$ slightly away from each of them.
 
 pushing away from a few random readings, rather than from every unlinked one, keeps each round fast; since most pairs are unlinked, a random handful is a good stand-in. the step size starts large and shrinks to zero, so early rounds set the overall shape and later rounds fine-tune it.
 
-(c) *determinism:* the only randomness is which readings are picked in (b), and it is driven by a fixed random seed. together with remark 3.4, the same library always produces the same map.
+(c) **determinism.** the only randomness is which readings are picked in (b), and it is driven by a fixed random seed. together with remark 3.4, the same library always produces the same map.
 
 **remark 4.9:** attraction acts only on pairs with $w_{ij} > 0$. consequently,
 
 - local neighborhoods are preserved reliably;
 - distances between clusters are only approximate;
 - orientation carries no meaning, since the mismatch in definition 4.7 depends only on distances in $Y$ and is unchanged by rotating, reflecting, or translating it.
+
+### 5. sections
+
+**definition 5.1 (sections):** for each section $c \in \mathcal{C}$, $\mathcal{M}_c \subseteq R$ is the set of readings the user has labelled with $c$. a reading may have zero, one, or two labels.
+
+**definition 5.2 (centroid):**
+
+$$
+\mu_c = \frac{\sum_{j \in \mathcal{M}_c} u_j}{\left\lVert \sum_{j \in \mathcal{M}_c} u_j \right\rVert}.
+$$
+
+the centroid is the normalized average direction of a section's readings, so it lies on $\mathbb{S}^{d-1}$ like the embeddings.
+
+**definition 5.3 (score and gap):** for an unlabelled reading $i$, $\text{score}_{ic} = u_i^\top \mu_c$ is the similarity between $i$ and section $c$. let $c_1$ and $c_2$ be its two highest-scoring sections, and
+
+$$
+g_i = \text{score}_{i c_1} - \text{score}_{i c_2} \geq 0
+$$
+
+the gap between them.
+
+**rule 5.4 (dot color):** a reading's dot is
+
+- the color of one section, if the reading has one label, or if it is unlabelled and $g_i \geq \tau$ (its section is then $c_1$);
+- split between two colors, if the reading has two labels, or if it is unlabelled and $g_i < \tau$ (its sections are then $c_1$ and $c_2$).
+
+**definition 5.5 (threshold):** $\tau$ is the $f$-quantile of the gaps $g_i$ over unlabelled readings, where $f$ is the fraction of them that should be split (e.g. $f = 0.05$). choosing $\tau$ from the data, rather than fixing it, adapts it to the embedding model, since different models produce similarities on different scales.
+
+### 6. world to screen
+
+**definition 6.1 (view):** a view is a zoom scale $\eta > 0$ and a pan offset $t \in \mathbb{R}^2$. a reading at world position $y_i$ is drawn at screen position
+
+$$
+p_i = \eta \, y_i + t.
+$$
+
+panning changes $t$, and zooming changes $\eta$.
+
+**definition 6.2 (fit):** let $B$ be the bounding box of $Y$, with width $B_w$, height $B_h$, and center $c_B$, and let $A$ be the screen area the map should fill, with width $A_w$, height $A_h$, and center $a$. then
+
+$$
+\eta_{\text{fit}} = \min\left(\frac{A_w}{B_w}, \frac{A_h}{B_h}\right), \qquad t = a - \eta_{\text{fit}} \, c_B.
+$$
+
+taking the minimum makes the whole map fit in both directions, and the offset places the center of $B$ at the center of $A$.
+
+**proposition 6.3 (zoom about the cursor):** when zooming from $\eta$ to $\eta'$ with the cursor at screen position $\xi$, setting
+
+$$
+t' = \xi - \frac{\eta'}{\eta}(\xi - t)
+$$
+
+keeps the world point under the cursor fixed.
+
+*proof.* the world point under the cursor is $w = (\xi - t)/\eta$. after the zoom, it is drawn at $\eta' w + t' = \frac{\eta'}{\eta}(\xi - t) + \xi - \frac{\eta'}{\eta}(\xi - t) = \xi$.
